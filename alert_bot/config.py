@@ -105,9 +105,12 @@ class RuntimeConfig:
 
 
 _BRAND_KEYWORDS: tuple[str, ...] = (
-    # Big tech
-    "apple", "google", "microsoft", "amazon", "meta", "facebook", "instagram",
-    "whatsapp", "youtube", "tiktok", "twitter", "tesla", "spacex", "nvidia",
+    # Big tech (NOTE: tiktok/twitter/instagram/youtube/facebook deliberately
+    # excluded — they're the platforms hosting legitimate viral memes and
+    # appear naturally in real token descriptions per strategy_1 step 5.
+    # Impersonation of those companies still gets caught via the
+    # "official X" / "real X" regex patterns below.)
+    "apple", "google", "microsoft", "amazon", "tesla", "spacex", "nvidia",
     "intel",
     # Crypto brands & infra
     "phantom", "metamask", "coinbase", "binance", "kraken", "opensea",

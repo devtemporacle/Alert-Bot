@@ -18,9 +18,19 @@ from dataclasses import dataclass
 
 from alert_bot.config import BLOCKLIST, NarrativeBlocklist
 
-# Unicode ranges covering CJK Unified Ideographs + extensions. We don't need
-# to be perfect — any one match in name/symbol is enough to flag.
-_CJK_RE = re.compile(r"[一-鿿㐀-䶿 0-⩭f]")
+# Unicode ranges covering CJK Unified Ideographs + extensions + Japanese kana
+# + Korean Hangul. Any one match in name/symbol is enough to flag.
+# Using \u escapes (not literal CJK glyphs) so the source stays ASCII-safe.
+_CJK_RE = re.compile(
+    "["
+    "一-鿿"  # CJK Unified Ideographs
+    "㐀-䶿"  # CJK Extension A
+    "　-〿"  # CJK Symbols and Punctuation
+    "぀-ゟ"  # Hiragana
+    "゠-ヿ"  # Katakana
+    "가-힯"  # Hangul Syllables
+    "]"
+)
 
 
 @dataclass(frozen=True)
@@ -46,14 +56,12 @@ def check_narrative(
     *,
     blocklist: NarrativeBlocklist = BLOCKLIST,
 ) -> NarrativeCheck:
-    """Run the brand + impersonation + CJK checks on a token's text.
+    """Run brand + impersonation + CJK checks on a token's text.
 
-    All matching is case-insensitive. Brand keywords are matched as
-    case-insensitive substrings against the *normalized* haystack (lowercased,
-    whitespace collapsed) — so "Disney" hits "DisneyWorld" or "official disney".
-
-    Description is optional because some Dex Screener pairs come without one;
-    the strategy doc still says to skip on name+ticker impersonation alone.
+    All matching is case-insensitive. Brand keywords match as substrings
+    against the combined (name + symbol + description) haystack — so
+    "Disney" hits "DisneyWorld" or "official disney". Description is
+    optional; some Dex Screener pairs come without one.
     """
     haystack_parts = [name or "", symbol or "", description or ""]
     haystack = " ".join(haystack_parts)
@@ -61,16 +69,17 @@ def check_narrative(
 
     reasons: list[str] = []
 
-    # 1. CJK detection on name/symbol only (description in English is fine).
+    # 1. CJK detection on name/symbol only (an English description containing
+    # one stray kanji shouldn't disqualify; the rule is "can't read the community").
     if blocklist.flag_cjk_text:
         if _CJK_RE.search(name or "") or _CJK_RE.search(symbol or ""):
             reasons.append("cjk-text")
 
-    # 2. Brand keyword substring match. Lowercase keywords already.
+    # 2. Brand keyword substring match.
     for brand in blocklist.brand_keywords:
         if brand and brand.lower() in haystack_lower:
             reasons.append(f"brand:{brand}")
-            # Don't break — a token can hit multiple brands, useful to surface all.
+            # Don't break — a token can hit multiple brands; useful to surface all.
 
     # 3. Impersonation regex patterns.
     for pattern in _compile_patterns(blocklist.impersonation_patterns):
@@ -88,7 +97,7 @@ if __name__ == "__main__":
         ("Phanny", "PHANNY", "the official phantom wallet token"),
         ("Real Pikachu", "RPIKA", "an unofficial pokemon meme"),
         ("BasedDoge", "BDOGE", "doge but based"),
-        ("中国币", "CHN", ""),
+        ("中国币", "CHN", ""),   # "Chinese coin" in Chinese
         ("Trump 2028", "TRUMP", "official trump campaign token"),
     ]
     for name, sym, desc in cases:

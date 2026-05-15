@@ -7,7 +7,11 @@
       "Bash(.venv/Scripts/python.exe -m pip install -r requirements.txt --quiet)",
       "Bash(.venv/Scripts/python.exe -m pip install pytest --quiet)",
       "Bash(.venv/Scripts/python.exe *)",
-      "Bash(PYTHONIOENCODING=utf-8 .venv/Scripts/python.exe *)"
+      "Bash(PYTHONIOENCODING=utf-8 .venv/Scripts/python.exe *)",
+      "Bash(gh auth *)",
+      "Bash(git init *)",
+      "Bash(git status *)",
+      "Bash(git add *)"
     ]
   }
 }
