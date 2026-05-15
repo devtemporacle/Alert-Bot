@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m py_compile alert_bot/config.py)",
+      "Bash(python -m venv .venv)",
+      "Bash(.venv/Scripts/python.exe -m pip install --upgrade pip --quiet)",
+      "Bash(.venv/Scripts/python.exe -m pip install -r requirements.txt --quiet)",
+      "Bash(.venv/Scripts/python.exe -m pip install pytest --quiet)",
+      "Bash(.venv/Scripts/python.exe *)",
+      "Bash(PYTHONIOENCODING=utf-8 .venv/Scripts/python.exe *)"
+    ]
+  }
+}
