@@ -110,18 +110,9 @@ pip install -r requirements.txt
 # 3. Configure secrets
 Copy-Item .env.example .env
 notepad .env   # fill in TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID
-
-# 4. (Optional) Smoke-test config
-python -m alert_bot.config
-
-# 5. Send a hello-world message to verify the Telegram wiring
-python -m alert_bot.telegram_alerter
-
-# 6. Run the bot
-python -m alert_bot.main
 ```
 
-If `Activate.ps1` is blocked:
+If `Activate.ps1` is blocked, run this once in PowerShell:
 
 ```powershell
 Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
@@ -131,9 +122,81 @@ Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
 
 1. Open Telegram, talk to `@BotFather`, run `/newbot`, follow the prompts.
    Paste the token into `TELEGRAM_BOT_TOKEN`.
-2. Open a chat with your new bot and press Start.
+2. **Open a chat with your new bot and press Start.** Until you do this, the
+   bot is not allowed to send you messages.
 3. Talk to `@userinfobot` — it will reply with your numeric ID. Paste it into
    `TELEGRAM_CHAT_ID`.
+
+---
+
+## Running the bot
+
+There are two ways to test it: wait for the strategy to find a real candidate
+(production mode), or force the bot to surface the best coin trading *right
+now* regardless of whether it meets the 4/5 threshold (debug mode).
+
+### Mode A — Wait for a real candidate (production)
+
+This is how the bot is meant to run. It polls Dex Screener every 60s and
+alerts only when something hits the 4/5 Go/No-Go threshold. Most cycles will
+log `fetched=N filtered=0` — by design. The strategy says "saying no most of
+the time is correct."
+
+```powershell
+# Optional but recommended on the first run: verify the Telegram wiring
+python -m alert_bot.telegram_alerter
+# -> should land "✅ Alert bot wired up. (Strategy 1)" in your chat
+
+# Then run the bot proper
+python -m alert_bot.main
+```
+
+You will see:
+
+- Immediate Telegram message: `🚀 Alert bot started (Strategy 1).`
+- Terminal log every 60s: `Cycle: fetched=98 filtered=N`
+- When a real 4/5 candidate appears: a card in Telegram with **👍 Approve /
+  👎 Skip / ⏸ Snooze** buttons
+- Daily (every 24h): a health ping with running counters
+
+Stop the bot with `Ctrl+C` — it shuts down cleanly.
+
+### Mode B — Force a candidate now (debug)
+
+Runs a single full pipeline cycle (Dex Screener → Rugcheck → narrative →
+score) on live market data, picks the **highest-scoring pair available right
+now even if it's below 4/5**, and sends you a card prefixed with `[FORCED]`.
+Useful for end-to-end validation when you don't want to wait.
+
+```powershell
+# IMPORTANT: stop the main loop first (Ctrl+C). Telegram allows only one
+# long-poll connection per bot token, so they would conflict.
+
+python scripts/force_best_candidate.py
+```
+
+If no pair currently passes the numeric pre-filters, the script falls back to
+scoring every Solana pair it found and surfaces the best of those — so you
+always get a card back unless Dex Screener is down.
+
+There's also `scripts/send_test_card.py` which sends a fixed sample card
+(ICED at 4/5 — same data as a forced run from earlier). It doesn't hit Dex
+Screener or Rugcheck, so it's a pure render/keyboard test:
+
+```powershell
+python scripts/send_test_card.py
+```
+
+Decisions made on `[FORCED]` cards write to SQLite the same way real alerts
+do. To clean them out afterward:
+
+```sql
+-- in any SQLite browser, against alert_bot.db
+DELETE FROM decisions WHERE alert_id IN (
+    SELECT id FROM alerts_sent WHERE snapshot_json LIKE '%"forced": true%'
+);
+DELETE FROM alerts_sent WHERE snapshot_json LIKE '%"forced": true%';
+```
 
 ---
 

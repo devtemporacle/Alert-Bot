@@ -11,7 +11,17 @@
       "Bash(gh auth *)",
       "Bash(git init *)",
       "Bash(git status *)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(curl -s https://api.github.com/users/devtemporacle)",
+      "Bash(FILTER_BRANCH_SQUELCH_WARNING=1 git filter-branch -f --env-filter ' *)",
+      "Bash(export EMAIL=\"168857863+devtemporacle@users.noreply.github.com\")",
+      "Bash(export OLD_EMAIL=\"jpezoaltamirano@gmail.com\")",
+      "Bash(git checkout *)",
+      "Bash(FILTER_BRANCH_SQUELCH_WARNING=1 git filter-branch -f --env-filter 'if [ \"$GIT_COMMITTER_EMAIL\" = \"__TRACKED_VAR__\" ]; then export GIT_COMMITTER_EMAIL=\"__TRACKED_VAR__\"; fi; if [ \"$GIT_AUTHOR_EMAIL\" = \"__TRACKED_VAR__\" ]; then export GIT_AUTHOR_EMAIL=\"__TRACKED_VAR__\"; fi' -- --all)",
+      "Bash(git remote *)",
+      "Bash(git push *)",
+      "Bash(git check-ignore *)"
     ]
   }
 }

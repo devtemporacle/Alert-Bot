@@ -10,6 +10,7 @@ DecisionCallback. Keeps the alerter independent of upstream modules.
 from __future__ import annotations
 
 import asyncio
+import html
 import logging
 from dataclasses import dataclass
 from typing import Awaitable, Callable, Literal
@@ -64,20 +65,33 @@ DecisionCallback = Callable[[str, Decision], Awaitable[None]]
 
 
 def _format_card(card: CandidateCard) -> str:
-    """Render the candidate card as Markdown for Telegram."""
-    header = f"🟢 *CANDIDATE — Score {card.score}/{card.score_max}*"
-    title = f"${card.ticker} — {card.name}"
+    """Render the candidate card as HTML for Telegram.
+
+    HTML mode (vs Markdown) because user-supplied content like the token name
+    and checklist lines can contain Markdown specials (`*`, `_`, `[`, etc.) —
+    e.g. the volume-acceleration line includes "5m $X * 12 = $Y" where the
+    asterisk is a multiplication sign. With HTML we only need to escape
+    `<`, `>`, `&` via html.escape on user content; tags stay literal.
+    """
+    e = html.escape  # short alias — used on every user-supplied field
+    header = f"🟢 <b>CANDIDATE — Score {card.score}/{card.score_max}</b>"
+    title = f"<b>${e(card.ticker)} — {e(card.name)}</b>"
     stats = (
         f"MCAP: ${card.mcap_usd:,.0f}  |  "
         f"Liq: ${card.liquidity_usd:,.0f}  |  "
         f"Age: {card.age_hours:.1f}h"
     )
-    body = "\n".join(card.checklist_lines)
-    links = f"[Chart]({card.dexscreener_url})"
+    # <code> renders as monospace + tap-to-copy on Telegram mobile and
+    # click-to-copy on desktop. Lets the user paste the contract straight
+    # into Photon / Phantom / a block explorer.
+    contract_line = f"Contract: <code>{e(card.contract)}</code>"
+    body = "\n".join(e(line) for line in card.checklist_lines)
+    # quote=True ensures URL contents are safe inside the href attribute.
+    links = f'<a href="{html.escape(card.dexscreener_url, quote=True)}">Chart</a>'
     if card.pumpfun_url:
-        links += f"  |  [Pump.fun]({card.pumpfun_url})"
+        links += f'  |  <a href="{html.escape(card.pumpfun_url, quote=True)}">Pump.fun</a>'
 
-    return f"{header}\n*{title}*\n{stats}\n\n{body}\n\n{links}"
+    return f"{header}\n{title}\n{stats}\n{contract_line}\n\n{body}\n\n{links}"
 
 
 def _build_keyboard(contract: str) -> InlineKeyboardMarkup:
@@ -143,7 +157,22 @@ class TelegramAlerter:
         # Application is the long-running handler host; Bot is the send-side.
         # We share one Application's Bot instance for both rather than
         # maintaining two connections.
-        self._app: Application = Application.builder().token(cfg.telegram_bot_token).build()
+        #
+        # Timeout tuning: PTB defaults to 5s read which is too tight when
+        # Telegram occasionally takes longer to respond to get_me() on
+        # cold start. Bumping to 20s for regular calls + 40s for the
+        # long-poll getUpdates (which intentionally blocks waiting for events).
+        self._app: Application = (
+            Application.builder()
+            .token(cfg.telegram_bot_token)
+            .connect_timeout(10.0)
+            .read_timeout(20.0)
+            .write_timeout(10.0)
+            .pool_timeout(10.0)
+            .get_updates_connect_timeout(10.0)
+            .get_updates_read_timeout(40.0)
+            .build()
+        )
         self._app.add_handler(CallbackQueryHandler(self._handle_callback))
 
     @property
@@ -151,8 +180,13 @@ class TelegramAlerter:
         return self._app.bot
 
     async def start(self) -> None:
-        """Initialize the Application and begin polling for callback queries."""
-        await self._app.initialize()
+        """Initialize the Application and begin polling for callback queries.
+
+        get_me() (inside initialize) occasionally times out on a slow first
+        request. Wrap it in the same retry helper as send_message — one
+        flaky network blip shouldn't crash the bot before it's even up.
+        """
+        await _send_with_retry(self._app.initialize)
         await self._app.start()
         # Start the updater so button presses come in via long-polling.
         await self._app.updater.start_polling(allowed_updates=["callback_query"])
@@ -188,7 +222,7 @@ class TelegramAlerter:
             await self.bot.send_message(
                 chat_id=self._cfg.telegram_chat_id,
                 text=_format_card(card),
-                parse_mode=ParseMode.MARKDOWN,
+                parse_mode=ParseMode.HTML,
                 reply_markup=_build_keyboard(card.contract),
                 disable_web_page_preview=True,
             )
@@ -229,7 +263,10 @@ class TelegramAlerter:
         try:
             if query.message is not None:
                 await query.edit_message_reply_markup(reply_markup=None)
-                await query.message.reply_text(f"{confirm}: `{contract[:8]}…`", parse_mode=ParseMode.MARKDOWN)
+                await query.message.reply_text(
+                    f"{confirm}: <code>{html.escape(contract[:8])}…</code>",
+                    parse_mode=ParseMode.HTML,
+                )
         except TelegramError as exc:
             log.warning("Failed to update message after callback: %s", exc)
 

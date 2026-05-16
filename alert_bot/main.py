@@ -133,6 +133,11 @@ class AlertBot:
             self.store.alerted_within, pair.base_token_address, self.cfg.dedup_window_hours
         )
         if already:
+            log.info(
+                "Skip $%s — already alerted within last %dh (dedup)",
+                pair.base_token_symbol,
+                self.cfg.dedup_window_hours,
+            )
             return
 
         scored = await self._evaluate_pair(pair)
@@ -157,14 +162,17 @@ class AlertBot:
             )
             return
 
-        await asyncio.to_thread(
-            self.store.record_alert, pair.base_token_address, scored.score, snapshot
-        )
+        # Order matters: send first, record on success only. If the send fails
+        # we don't want to mark this contract as "alerted" and dedup-skip it
+        # for 24h — we'd silently drop a real candidate.
         try:
             await self.alerter.send_candidate_card(_to_card(scored))
         except Exception:  # noqa: BLE001
-            # Don't let one bad alert kill the loop. Log and continue.
             log.exception("Failed to send Telegram alert for $%s", pair.base_token_symbol)
+            return
+        await asyncio.to_thread(
+            self.store.record_alert, pair.base_token_address, scored.score, snapshot
+        )
 
     async def _poll_once(self) -> None:
         try:
