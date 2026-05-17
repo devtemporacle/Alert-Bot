@@ -58,7 +58,8 @@ Narrative filter ─┘
    for Pump.fun tokens).
 2. **Pre-filter** by Strategy 1's numeric thresholds: liquidity ≥ $15K, pair
    age 0–6h, 1H txns ≥ 200, 1H vol ≥ $20K, 5M txns ≥ 50, 5M buys ≥ 25,
-   5M vol ≥ $5K.
+   5M vol ≥ $5K, **MCAP ≤ $80K** (biases toward freshly-graduated tokens
+   before they've already pumped; tune via `FILTERS.max_market_cap_usd`).
 3. **Rugcheck** each surviving contract via `rugcheck.xyz/v1/tokens/{mint}/report`.
    Parse mint/freeze authority state, top-10 holder concentration, LP
    protection (locked or burned), insider count, danger risks.

@@ -189,6 +189,15 @@ def _parse_pair(raw: dict[str, Any]) -> Pair | None:
 def passes_filters(pair: Pair, thresholds: FilterThresholds = FILTERS) -> bool:
     """Strategy 1 numeric pre-filters. All conditions must hold."""
     age = pair.age_hours
+    # Use market_cap_usd when available; fall back to fdv_usd (which is
+    # essentially the same for tokens with no vesting/lockups). 0 means
+    # the upstream returned no data — treat that as "unknown, don't filter".
+    mcap = pair.market_cap_usd or pair.fdv_usd or 0.0
+    mcap_ok = (
+        thresholds.max_market_cap_usd <= 0.0
+        or mcap <= 0.0  # unknown MCAP — skip the check rather than block
+        or mcap <= thresholds.max_market_cap_usd
+    )
     return (
         pair.chain_id == "solana"
         and pair.dex_id in ALLOWED_DEX_IDS
@@ -199,6 +208,7 @@ def passes_filters(pair: Pair, thresholds: FilterThresholds = FILTERS) -> bool:
         and pair.txns_m5 >= thresholds.min_txns_5m
         and pair.buys_m5 >= thresholds.min_buys_5m
         and pair.volume_m5_usd >= thresholds.min_volume_5m_usd
+        and mcap_ok
     )
 
 

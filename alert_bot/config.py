@@ -57,6 +57,13 @@ class FilterThresholds:
     min_txns_5m: int = 50
     min_buys_5m: int = 25
     min_volume_5m_usd: float = 5_000.0
+    # Cap on market cap to bias toward freshly-graduated tokens (the "very
+    # fresh post-grad" zone). Just-graduated Pump.fun tokens enter the DEX
+    # at ~$70K MCAP, so $80K leaves a small headroom for the first few
+    # post-graduation candles. Mature movers already trading at $200K+
+    # MCAP are filtered out — the "you're the exit liquidity" zone.
+    # Set to None / 0 to disable (treat as unbounded).
+    max_market_cap_usd: float = 80_000.0
 
 
 @dataclass(frozen=True)
