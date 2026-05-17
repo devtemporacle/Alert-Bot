@@ -33,12 +33,14 @@ from alert_bot.config import (
 )
 from alert_bot.dex_screener_client import DexScreenerClient, Pair
 from alert_bot.narrative_filter import check_narrative
+from alert_bot.post_spike_filter import check_post_spike
 from alert_bot.rugcheck_client import RugcheckClient, RugcheckError
 from alert_bot.scorer import ScoredCandidate, score_candidate
 from alert_bot.state_store import StateStore
 from alert_bot.telegram_alerter import (
     CandidateCard,
     Decision,
+    PostSpikeCard,
     TelegramAlerter,
 )
 
@@ -91,6 +93,20 @@ def _to_card(sc: ScoredCandidate) -> CandidateCard:
     )
 
 
+def _to_post_spike_card(pair: Pair, reason: str) -> PostSpikeCard:
+    return PostSpikeCard(
+        contract=pair.base_token_address,
+        ticker=pair.base_token_symbol or "?",
+        name=pair.base_token_name or "?",
+        mcap_usd=pair.market_cap_usd or pair.fdv_usd or 0.0,
+        liquidity_usd=pair.liquidity_usd,
+        age_hours=pair.age_hours,
+        reason=reason,
+        dexscreener_url=pair.dexscreener_url,
+        pumpfun_url=_pumpfun_url(pair),
+    )
+
+
 class AlertBot:
     """Top-level service: owns the loop, the clients, and the state store."""
 
@@ -137,6 +153,44 @@ class AlertBot:
                 "Skip $%s — already alerted within last %dh (dedup)",
                 pair.base_token_symbol,
                 self.cfg.dedup_window_hours,
+            )
+            return
+
+        # Post-spike pre-empt: if the price just dumped, flag as chart-review
+        # and skip normal scoring (per strategy: "the chart already ran").
+        # Runs before rugcheck so we don't burn an API call on a disqualified pair.
+        post_spike = check_post_spike(pair)
+        if post_spike.is_post_spike:
+            log.info(
+                "Post-spike $%s — %s",
+                pair.base_token_symbol,
+                post_spike.reason,
+            )
+            snapshot = {
+                "post_spike": True,
+                "reason": post_spike.reason,
+                "price_change_m5_pct": post_spike.price_change_m5_pct,
+                "ticker": pair.base_token_symbol,
+                "mcap_usd": pair.market_cap_usd,
+                "liquidity_usd": pair.liquidity_usd,
+                "age_hours": pair.age_hours,
+            }
+            await asyncio.to_thread(
+                self.store.upsert_candidate_seen,
+                pair.base_token_address,
+                0,  # not a 4/5 score — it was pre-empted
+                snapshot,
+            )
+            try:
+                await self.alerter.send_post_spike_alert(
+                    _to_post_spike_card(pair, post_spike.reason)
+                )
+            except Exception:  # noqa: BLE001
+                log.exception("Failed to send post-spike alert for $%s", pair.base_token_symbol)
+                return
+            # Record AFTER successful send (same ordering as candidate alerts).
+            await asyncio.to_thread(
+                self.store.record_alert, pair.base_token_address, 0, snapshot
             )
             return
 

@@ -74,6 +74,11 @@ class Pair:
     socials: tuple[str, ...]
     websites: tuple[str, ...]
     dexscreener_url: str
+    # Percent change over the last 5 minutes / 1 hour, as reported by
+    # Dex Screener. Used by the post-spike filter. Defaults to 0.0 so older
+    # callers/tests that don't populate them stay valid.
+    price_change_m5_pct: float = 0.0
+    price_change_h1_pct: float = 0.0
 
     @property
     def age_hours(self) -> float:
@@ -137,6 +142,7 @@ def _parse_pair(raw: dict[str, Any]) -> Pair | None:
     txns = raw.get("txns") or {}
     txns_h1_obj = txns.get("h1") or {}
     txns_m5_obj = txns.get("m5") or {}
+    price_change = raw.get("priceChange") or {}
     info = raw.get("info") or {}
 
     socials_raw = info.get("socials") or []
@@ -175,6 +181,8 @@ def _parse_pair(raw: dict[str, Any]) -> Pair | None:
         socials=socials,
         websites=websites,
         dexscreener_url=str(raw.get("url") or f"https://dexscreener.com/{chain_id}/{pair_address}"),
+        price_change_m5_pct=_get_number(price_change, "m5"),
+        price_change_h1_pct=_get_number(price_change, "h1"),
     )
 
 

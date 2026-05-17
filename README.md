@@ -65,7 +65,11 @@ Narrative filter ─┘
 4. **Narrative filter:** substring match against a brand/IP blocklist plus
    "official X / real X / verified X" regex patterns, plus CJK-text detection.
    Catches the impersonation failure mode (PHANNY-style) that Rugcheck can't see.
-5. **Score.** Five binary checks: Rugcheck clean / holders distributed (top-10
+5. **Post-spike pre-empt.** If `priceChange.m5 < -15%` (price dropped more
+   than 15% in the last 5 minutes), short-circuit normal scoring and send a
+   `🟡 POST-SPIKE — CHART REVIEW REQUIRED` flag instead. Encodes Strategy 1's
+   "the chart already ran = you're the exit liquidity" rule as a hard gate.
+6. **Score.** Five binary checks: Rugcheck clean / holders distributed (top-10
    < 35%) / volume accelerating (5M projection > 1H average) / socials linked /
    narrative passes. Alert only on score ≥ 4.
 6. **Alert.** Telegram message with a formatted card and Approve / Skip / Snooze
@@ -82,12 +86,14 @@ alert_bot/
 ├── dex_screener_client.py # fetch, parse, filter
 ├── rugcheck_client.py     # contract safety check + parsing
 ├── narrative_filter.py    # brand + impersonation + CJK regex
+├── post_spike_filter.py   # priceChange.m5 < -15% pre-empt (chart-already-ran)
 ├── scorer.py              # 4/5 Go/No-Go pure function (unit-tested)
 ├── state_store.py         # SQLite: candidates_seen / alerts_sent / decisions / trades
 ├── telegram_alerter.py    # v21+ async, candidate cards, callback handler
 └── main.py                # asyncio loop, signal handling, daily health ping
 tests/
-└── test_scorer.py         # 23 tests
+├── test_scorer.py             # 23 tests
+└── test_post_spike_filter.py  # 8 tests
 ```
 
 Type hints throughout. Domain objects (`Pair`, `RugcheckResult`,

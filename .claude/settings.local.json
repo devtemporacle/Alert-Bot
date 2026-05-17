@@ -21,7 +21,8 @@
       "Bash(FILTER_BRANCH_SQUELCH_WARNING=1 git filter-branch -f --env-filter 'if [ \"$GIT_COMMITTER_EMAIL\" = \"__TRACKED_VAR__\" ]; then export GIT_COMMITTER_EMAIL=\"__TRACKED_VAR__\"; fi; if [ \"$GIT_AUTHOR_EMAIL\" = \"__TRACKED_VAR__\" ]; then export GIT_AUTHOR_EMAIL=\"__TRACKED_VAR__\"; fi' -- --all)",
       "Bash(git remote *)",
       "Bash(git push *)",
-      "Bash(git check-ignore *)"
+      "Bash(git check-ignore *)",
+      "Bash(git -c user.email=168857863+devtemporacle@users.noreply.github.com commit -m ' *)"
     ]
   }
 }

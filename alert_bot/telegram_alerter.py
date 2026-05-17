@@ -64,6 +64,26 @@ class CandidateCard:
 DecisionCallback = Callable[[str, Decision], Awaitable[None]]
 
 
+@dataclass(frozen=True)
+class PostSpikeCard:
+    """Alert payload for the spike-and-dump pre-empt path.
+
+    Rendered with a distinct header + no Approve/Skip/Snooze buttons —
+    it's an informational flag, not a buy/sell decision point.
+    """
+
+    contract: str
+    ticker: str
+    name: str
+    mcap_usd: float
+    liquidity_usd: float
+    age_hours: float
+    # Short reason, e.g. "Down 18% in 5 min — recent peak inside 15-min window..."
+    reason: str
+    dexscreener_url: str
+    pumpfun_url: str | None = None
+
+
 def _format_card(card: CandidateCard) -> str:
     """Render the candidate card as HTML for Telegram.
 
@@ -87,6 +107,33 @@ def _format_card(card: CandidateCard) -> str:
     contract_line = f"Contract: <code>{e(card.contract)}</code>"
     body = "\n".join(e(line) for line in card.checklist_lines)
     # quote=True ensures URL contents are safe inside the href attribute.
+    links = f'<a href="{html.escape(card.dexscreener_url, quote=True)}">Chart</a>'
+    if card.pumpfun_url:
+        links += f'  |  <a href="{html.escape(card.pumpfun_url, quote=True)}">Pump.fun</a>'
+
+    return f"{header}\n{title}\n{stats}\n{contract_line}\n\n{body}\n\n{links}"
+
+
+def _format_post_spike_card(card: PostSpikeCard) -> str:
+    """Render the post-spike flag card as HTML for Telegram.
+
+    Distinct from the normal candidate card: yellow circle header,
+    explicit warning copy, no buttons (rendered by caller, not here).
+    """
+    e = html.escape
+    header = "🟡 <b>POST-SPIKE — CHART REVIEW REQUIRED</b>"
+    title = f"<b>${e(card.ticker)} — {e(card.name)}</b>"
+    stats = (
+        f"MCAP: ${card.mcap_usd:,.0f}  |  "
+        f"Liq: ${card.liquidity_usd:,.0f}  |  "
+        f"Age: {card.age_hours:.1f}h"
+    )
+    contract_line = f"Contract: <code>{e(card.contract)}</code>"
+    body = (
+        f"⚠️ {e(card.reason)}\n"
+        f"Open the chart before considering — this matches the "
+        f"'spike-and-dump, you'd be exit liquidity' pattern."
+    )
     links = f'<a href="{html.escape(card.dexscreener_url, quote=True)}">Chart</a>'
     if card.pumpfun_url:
         links += f'  |  <a href="{html.escape(card.pumpfun_url, quote=True)}">Pump.fun</a>'
@@ -228,6 +275,18 @@ class TelegramAlerter:
             )
         await _send_with_retry(_do)
         log.info("Sent candidate card for %s (score %d/%d)", card.ticker, card.score, card.score_max)
+
+    async def send_post_spike_alert(self, card: PostSpikeCard) -> None:
+        """Send a post-spike flag (no buttons — informational only)."""
+        async def _do() -> None:
+            await self.bot.send_message(
+                chat_id=self._cfg.telegram_chat_id,
+                text=_format_post_spike_card(card),
+                parse_mode=ParseMode.HTML,
+                disable_web_page_preview=True,
+            )
+        await _send_with_retry(_do)
+        log.info("Sent post-spike alert for %s", card.ticker)
 
     async def _handle_callback(self, update: Update, _context: ContextTypes.DEFAULT_TYPE) -> None:
         """Parse a button press, ack it, persist the decision."""
