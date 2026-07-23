@@ -1,4 +1,4 @@
-# Memecoin Alert Bot
+# Alert Bot
 
 A Python alert bot that watches Solana Pump.fun graduated tokens on Dex Screener,
 runs each candidate through Rugcheck and a brand/impersonation filter, scores it
